@@ -1,0 +1,34 @@
+﻿<div id="scene_illustrator_settings" class="scene-illustrator-settings">
+  <div class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+      <b>Scene Illustrator（場景圖像生成）</b>
+      <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    </div>
+    <div class="inline-drawer-content">
+      <label class="checkbox_label"><input id="si_enabled" type="checkbox"><span>啟用 extension</span></label>
+      <label>分析模型
+        <select id="si_analysis_source" class="text_pole">
+          <option value="current">目前聊天模型</option>
+          <option value="profile">Connection Profile</option>
+        </select>
+      </label>
+      <label id="si_profile_row">Connection Profile
+        <select id="si_profile" class="text_pole"><option value="">請選擇</option></select>
+      </label>
+      <div class="si-setting-grid">
+        <label>預設提示詞風格<select id="si_prompt_style" class="text_pole"><option value="direct">直接描述</option><option value="booru">Booru tags</option></select></label>
+        <label>每場景候選數<input id="si_candidate_count" class="text_pole" type="number" min="1" max="8"></label>
+        <label>最多場景數<input id="si_max_scenes" class="text_pole" type="number" min="1" max="3"></label>
+        <label>上下文訊息數<input id="si_context_messages" class="text_pole" type="number" min="4" max="200"></label>
+      </div>
+      <div class="si-button-row">
+        <button id="si_manual" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i> 完全手動</button>
+        <button id="si_character_state" class="menu_button"><i class="fa-solid fa-user-pen"></i> 角色狀態</button>
+        <button id="si_export" class="menu_button"><i class="fa-solid fa-file-export"></i> 匯出設定</button>
+        <button id="si_import" class="menu_button"><i class="fa-solid fa-file-import"></i> 匯入設定</button>
+        <input id="si_import_file" type="file" accept="application/json" hidden>
+      </div>
+      <small>圖片生成沿用官方 Image Generation 設定。請先在官方面板完成 ComfyUI 或其他後端設定。</small>
+    </div>
+  </div>
+</div>
