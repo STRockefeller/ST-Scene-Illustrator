@@ -6,7 +6,7 @@ const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
 
 test('selection action survives its own mouseup before click', () => {
     assert.match(source, /event\?\.target\?\.closest\?\.\('\.scene-illustrator-selection'\)/);
-    assert.match(source, /為選取段落生成圖片/);
+    assert.match(source, /Generate an image for the selected passage/);
 });
 
 test('candidate generation disables secondary prompt expansion', () => {
@@ -25,7 +25,7 @@ test('candidate generation submits one concurrent fixed-prompt batch', () => {
 });
 
 test('workbench shows the actual frozen positive and negative prompt', () => {
-    assert.match(source, /實際送入圖像模型的固定 Prompt/);
+    assert.match(source, /Fixed prompt sent to the image model/);
     assert.match(source, /si-actual-positive/);
     assert.match(source, /si-actual-negative/);
 });
@@ -54,8 +54,8 @@ test('character state is optional and corrupted snapshots fall back safely', () 
 });
 
 test('state editor can add characters and custom fields before AI analysis', () => {
-    assert.match(source, /新增角色/);
-    assert.match(source, /新增自訂欄位/);
+    assert.match(source, /tr\('Add character'\)/);
+    assert.match(source, /tr\('Add custom field'\)/);
     assert.match(source, /createEmptyCharacterState\(\)/);
     assert.match(source, /data-custom-label/);
     assert.match(source, /data-custom-value/);

@@ -1,5 +1,7 @@
 ﻿import { DEFAULT_SETTINGS, EMPTY_CHAT_STATE, METADATA_VERSION, PROMPT_STYLES } from './constants.js';
 
+import { tr } from './i18n.js';
+
 export function normalizeSettings(value = {}) {
     return {
         ...DEFAULT_SETTINGS, ...value,
@@ -75,28 +77,28 @@ export function splitParagraphs(text) {
 export function parseAnalysisResponse(raw) {
     if (raw && typeof raw === 'object') return raw;
     const text = String(raw ?? '').trim();
-    if (!text) throw new Error('分析模型回傳空白內容。');
+    if (!text) throw new Error(tr('The analysis model returned empty content.'));
     const unfenced = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
     try { return JSON.parse(unfenced); } catch {
         const start = unfenced.indexOf('{');
         const end = unfenced.lastIndexOf('}');
         if (start >= 0 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
-        throw new Error('分析模型未回傳有效 JSON。');
+        throw new Error(tr('The analysis model did not return valid JSON.'));
     }
 }
 
 export function validateAnalysis(data, paragraphCount, maxScenes = 3) {
     const errors = [];
-    if (!data || !Array.isArray(data.scenes)) return ['缺少 scenes 陣列。'];
-    if (data.scenes.length < 1 || data.scenes.length > maxScenes) errors.push(`場景數必須介於 1 與 ${maxScenes}。`);
+    if (!data || !Array.isArray(data.scenes)) return [tr('The scenes array is missing.')];
+    if (data.scenes.length < 1 || data.scenes.length > maxScenes) errors.push(tr('The scene count must be between 1 and {max}.', { max: maxScenes }));
     data.scenes.forEach((scene, index) => {
-        const label = `場景 ${index + 1}`;
-        if (!Number.isInteger(scene.paragraphIndex) || scene.paragraphIndex < 0 || scene.paragraphIndex >= paragraphCount) errors.push(`${label} 的 paragraphIndex 無效。`);
-        if (wordCount(scene.directPrompt) < 55) errors.push(`${label} 的 direct prompt 過短。`);
-        if (tagCount(scene.booruPrompt) < 30) errors.push(`${label} 的 booru prompt 過短。`);
-        if (!String(scene.camera ?? '').trim()) errors.push(`${label} 缺少鏡頭方向。`);
-        if (!String(scene.anchorText ?? '').trim()) errors.push(`${label} 缺少文字錨點。`);
-        if (!Array.isArray(scene.visibleCharacters)) errors.push(`${label} 缺少可見角色資料。`);
+        const label = tr('Scene {number}', { number: index + 1 });
+        if (!Number.isInteger(scene.paragraphIndex) || scene.paragraphIndex < 0 || scene.paragraphIndex >= paragraphCount) errors.push(tr('{scene} has an invalid paragraphIndex.', { scene: label }));
+        if (wordCount(scene.directPrompt) < 55) errors.push(tr('{scene} has a direct prompt that is too short.', { scene: label }));
+        if (tagCount(scene.booruPrompt) < 30) errors.push(tr('{scene} has a booru prompt that is too short.', { scene: label }));
+        if (!String(scene.camera ?? '').trim()) errors.push(tr('{scene} is missing camera direction.', { scene: label }));
+        if (!String(scene.anchorText ?? '').trim()) errors.push(tr('{scene} is missing a text anchor.', { scene: label }));
+        if (!Array.isArray(scene.visibleCharacters)) errors.push(tr('{scene} is missing visible character data.', { scene: label }));
 
     });
     return errors;
@@ -105,7 +107,7 @@ export function validateAnalysis(data, paragraphCount, maxScenes = 3) {
 export function normalizeAnalysis(data, paragraphs, messageId) {
     const scenes = data.scenes.map((scene, index) => ({
         id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${index}`,
-        title: String(scene.title || `場景 ${index + 1}`).trim(), messageId,
+        title: String(scene.title || tr('Scene {number}', { number: index + 1 })).trim(), messageId,
         paragraphIndex: clampInteger(scene.paragraphIndex, 0, Math.max(0, paragraphs.length - 1), 0),
         anchorText: String(scene.anchorText || '').trim(), camera: String(scene.camera || '').trim(),
         composition: String(scene.composition || '').trim(),

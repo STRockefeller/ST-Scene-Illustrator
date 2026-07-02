@@ -10,6 +10,7 @@ import {
     normalizeAnalysis, normalizeSettings, parseAnalysisResponse, scenePrompt, splitParagraphs, validateAnalysis,
 } from './src/core.js';
 import { ANALYSIS_SCHEMA, SYSTEM_PROMPT, buildAnalysisPrompt, buildRepairPrompt } from './src/prompts.js';
+import { localizeSettings, tr } from './src/i18n.js';
 
 let settings = normalizeSettings();
 let activeJob = null;
@@ -28,6 +29,7 @@ async function mountSettings() {
     const response = await fetch(new URL('./settings.html', import.meta.url));
     const html = await response.text();
     document.querySelector('#extensions_settings2')?.insertAdjacentHTML('beforeend', html);
+    localizeSettings(document.querySelector('#scene_illustrator_settings'));
     populateProfileSelect();
     syncSettingsUi();
 
@@ -68,12 +70,12 @@ function registerCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'scene-image', aliases: ['scene-img'],
         callback: async (_args, value) => { value?.trim() ? openManualWorkbench(value.trim()) : openManualWorkbench(); return ''; },
-        helpString: '開啟 Scene Illustrator 手動生成工作台。可直接在命令後提供 prompt。',
+        helpString: tr('Open the Scene Illustrator manual workbench. You can provide a prompt after the command.'),
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'scene-analyze',
         callback: async () => { const id = findLatestAssistantMessageId(); if (id >= 0) await analyzeMessage(id, ''); return ''; },
-        helpString: '分析最近一則 AI 回應並開啟場景工作台。',
+        helpString: tr('Analyze the latest AI response and open the scene workbench.'),
     }));
 }
 
@@ -111,7 +113,7 @@ function onTextSelection(event) {
     const rect = range.getBoundingClientRect();
     const button = document.createElement('button');
     button.className = 'scene-illustrator-selection';
-    button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>為選取段落生成圖片</span>';
+    button.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>${tr('Generate an image for the selected passage')}</span>`;
     button.style.left = `${Math.max(8, Math.min(window.innerWidth - 150, rect.left))}px`;
     button.style.top = `${Math.max(8, rect.bottom + 6)}px`;
     button.addEventListener('mousedown', event => event.preventDefault());
@@ -129,22 +131,22 @@ function addMessageAction(messageId) {
     if (!actions || actions.querySelector('.scene-illustrator-message')) return;
     const button = document.createElement('div');
     button.className = 'mes_button scene-illustrator-message fa-solid fa-wand-magic-sparkles';
-    button.title = '分析場景並生成圖片';
+    button.title = tr('Analyze scenes and generate images');
     actions.prepend(button);
 }
 
 async function analyzeMessage(messageId, selectionText) {
-    if (activeJob) return toastr.warning('已有場景工作正在進行。');
+    if (activeJob) return toastr.warning(tr('A scene job is already in progress.'));
     const context = getContext();
     const message = context.chat?.[messageId];
     const sourceChatId = context.chatId;
-    if (!message?.mes) return toastr.error('找不到目標訊息。');
+    if (!message?.mes) return toastr.error(tr('The target message could not be found.'));
     const paragraphs = splitParagraphs(message.mes);
-    if (!paragraphs.length) return toastr.warning('目標訊息沒有可分析文字。');
+    if (!paragraphs.length) return toastr.warning(tr('The target message has no text to analyze.'));
 
     const controller = new AbortController();
     activeJob = { kind: 'analysis', controller, cancelled: false };
-    toastr.info('正在分析場景與角色狀態…', 'Scene Illustrator');
+    toastr.info(tr('Analyzing scenes and character state…'), 'Scene Illustrator');
     try {
         const chatState = getChatState(context);
         const prompt = buildAnalysisPrompt({
@@ -170,13 +172,13 @@ async function analyzeMessage(messageId, selectionText) {
         saveChatState(context, chatState);
         openWorkbench(messageId, analysis.scenes);
     } catch (error) {
-        if (error.name !== 'AbortError') { console.error(error); toastr.error(error.message, '場景分析失敗'); }
+        if (error.name !== 'AbortError') { console.error(error); toastr.error(error.message, tr('Scene analysis failed')); }
     } finally { activeJob = null; }
 }
 
 async function requestAnalysis(userPrompt, signal) {
     if (settings.analysisSource === 'profile') {
-        if (!settings.connectionProfileId) throw new Error('請先選擇 Connection Profile。');
+        if (!settings.connectionProfileId) throw new Error(tr('Select a Connection Profile first.'));
         const messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }];
         const profilePrompt = ConnectionManagerRequestService.constructPrompt(messages, settings.connectionProfileId);
         const result = await ConnectionManagerRequestService.sendRequest(
@@ -271,7 +273,7 @@ function openWorkbench(messageId, scenes) {
     closeOverlay();
     const overlay = document.createElement('div');
     overlay.className = 'scene-illustrator-overlay';
-    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>場景圖像工作台</h3><button class="menu_button si-close">關閉</button></div><div class="si-progress"></div><div class="si-scenes"></div><div class="si-workbench-actions"><button class="menu_button si-cancel-job">取消後續生成</button><button class="menu_button si-generate"><i class="fa-solid fa-images"></i> 生成候選圖</button><button class="menu_button si-save"><i class="fa-solid fa-check"></i> 插入已選圖片</button></div></section>`;
+    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>${tr('Scene image workbench')}</h3><button class="menu_button si-close">${tr('Close')}</button></div><div class="si-progress"></div><div class="si-scenes"></div><div class="si-workbench-actions"><button class="menu_button si-cancel-job">${tr('Cancel remaining generation')}</button><button class="menu_button si-generate"><i class="fa-solid fa-images"></i> ${tr('Generate candidates')}</button><button class="menu_button si-save"><i class="fa-solid fa-check"></i> ${tr('Insert selected images')}</button></div></section>`;
     const list = overlay.querySelector('.si-scenes');
     scenes.forEach((scene, index) => list.append(createSceneCard(scene, index)));
     overlay.querySelector('.si-close').addEventListener('click', closeOverlay);
@@ -286,7 +288,7 @@ function createSceneCard(scene, index) {
     const card = document.createElement('article');
     card.className = 'si-scene-card';
     card.dataset.sceneId = scene.id;
-    card.innerHTML = `<div class="si-scene-head"><strong></strong><label><input type="checkbox" class="si-enabled" checked> 生成此場景</label></div><div class="si-scene-meta"><label>插入段落</label><input class="text_pole si-paragraph" type="number" min="0"><label>提示詞風格</label><select class="text_pole si-style"><option value="direct">直接描述</option><option value="booru">Booru tags</option></select></div><label>直接描述 prompt<textarea class="text_pole si-direct"></textarea></label><label>Booru tags<textarea class="text_pole si-booru"></textarea></label><label>Negative prompt<textarea class="text_pole si-negative"></textarea></label><details class="si-actual-prompt" open><summary>實際送入圖像模型的固定 Prompt</summary><div><b>Positive</b><pre class="si-actual-positive"></pre><b>Negative</b><pre class="si-actual-negative"></pre></div></details><div class="si-candidates"></div>`;
+    card.innerHTML = `<div class="si-scene-head"><strong></strong><label><input type="checkbox" class="si-enabled" checked> ${tr('Generate this scene')}</label></div><div class="si-scene-meta"><label>${tr('Insert after paragraph')}</label><input class="text_pole si-paragraph" type="number" min="0"><label>${tr('Prompt style')}</label><select class="text_pole si-style"><option value="direct">${tr('Direct description')}</option><option value="booru">Booru tags</option></select></div><label>${tr('Direct description prompt')}<textarea class="text_pole si-direct"></textarea></label><label>Booru tags<textarea class="text_pole si-booru"></textarea></label><label>Negative prompt<textarea class="text_pole si-negative"></textarea></label><details class="si-actual-prompt" open><summary>${tr('Fixed prompt sent to the image model')}</summary><div><b>Positive</b><pre class="si-actual-positive"></pre><b>Negative</b><pre class="si-actual-negative"></pre></div></details><div class="si-candidates"></div>`;
     card.querySelector('strong').textContent = `${index + 1}. ${scene.title}`;
     card.querySelector('.si-paragraph').value = scene.paragraphIndex;
     card.querySelector('.si-style').value = scene.style || settings.promptStyle;
@@ -322,21 +324,21 @@ function freezeActualPrompt(scene) {
 
 function updateActualPromptPreview(card, scene) {
     freezeActualPrompt(scene);
-    card.querySelector('.si-actual-positive').textContent = scene.actualPrompt || '（空白）';
-    card.querySelector('.si-actual-negative').textContent = scene.actualNegativePrompt || '（空白）';
+    card.querySelector('.si-actual-positive').textContent = scene.actualPrompt || tr('(empty)');
+    card.querySelector('.si-actual-negative').textContent = scene.actualNegativePrompt || tr('(empty)');
 }
 
 async function generateCandidates(overlay, scenes) {
-    if (activeJob) return toastr.warning('已有工作正在進行。');
+    if (activeJob) return toastr.warning(tr('A job is already in progress.'));
     syncScenesFromWorkbench(overlay, scenes);
     const progress = overlay.querySelector('.si-progress');
     activeJob = { kind: 'imageBatch', cancelled: false, controller: new AbortController(), frozenPrompts: new Set() };
     const enabled = scenes.filter(scene => scene.enabled);
-    if (!enabled.length) { activeJob = null; return toastr.warning('請至少勾選一個場景。'); }
+    if (!enabled.length) { activeJob = null; return toastr.warning(tr('Select at least one scene.')); }
     const total = enabled.length * settings.candidateCount;
     let done = 0;
     const sd = extension_settings.sd;
-    if (!sd) { activeJob = null; return toastr.error('找不到官方 Image Generation 設定。'); }
+    if (!sd) { activeJob = null; return toastr.error(tr('Official Image Generation settings could not be found.')); }
     const original = {
         free_extend: sd.free_extend,
         minimal_prompt_processing: sd.minimal_prompt_processing,
@@ -362,7 +364,7 @@ async function generateCandidates(overlay, scenes) {
             scene.selectedUrl = '';
             const card = overlay.querySelector(`[data-scene-id="${CSS.escape(scene.id)}"]`);
             renderCandidates(card, scene);
-            progress.textContent = `正在批次生成 ${scene.title}：${settings.candidateCount} 張候選使用同一份固定 Prompt（總進度 ${done}/${total}）`;
+            progress.textContent = tr('Batch generating {title}: {count} candidates use the same fixed prompt (total progress {done}/{total})', { title: scene.title, count: settings.candidateCount, done, total });
             const jobs = Array.from({ length: settings.candidateCount }, () => generateOneCandidate(scene));
             const results = await Promise.allSettled(jobs);
             if (activeJob.cancelled) throw new DOMException('Cancelled', 'AbortError');
@@ -373,13 +375,13 @@ async function generateCandidates(overlay, scenes) {
             }
             done += scene.candidates.length;
             renderCandidates(card, scene);
-            if (!scene.candidates.length) throw failures[0] ?? new Error('批次生成沒有回傳圖片。');
-            if (failures.length) toastr.warning(`${scene.title} 有 ${failures.length} 張生成失敗，其餘候選已保留。`);
+            if (!scene.candidates.length) throw failures[0] ?? new Error(tr('Batch generation returned no images.'));
+            if (failures.length) toastr.warning(tr('{title}: {count} candidates failed; the remaining candidates were kept.', { title: scene.title, count: failures.length }));
         }
-        progress.textContent = `完成，共生成 ${done} 張候選圖；同一場景的候選均使用畫面上顯示的同一份固定 Prompt。`;
+        progress.textContent = tr('Complete. Generated {count} candidates. Candidates for the same scene used the same fixed prompt shown above.', { count: done });
     } catch (error) {
-        progress.textContent = error.name === 'AbortError' ? '已取消後續生成。' : `生成中止：${error.message}`;
-        if (error.name !== 'AbortError') { console.error(error); toastr.error(error.message, '圖片生成失敗'); }
+        progress.textContent = error.name === 'AbortError' ? tr('Remaining generation canceled.') : tr('Generation stopped: {error}', { error: error.message });
+        if (error.name !== 'AbortError') { console.error(error); toastr.error(error.message, tr('Image generation failed')); }
     } finally {
         Object.assign(sd, original);
         activeJob = null;
@@ -391,7 +393,7 @@ async function generateOneCandidate(scene) {
     const command = buildImagineCommand(scene.actualPrompt, scene.actualNegativePrompt);
     const result = await getContext().executeSlashCommandsWithOptions(command, { handleParserErrors: false, handleExecutionErrors: false, source: 'scene-illustrator' });
     const url = String(result?.pipe ?? '').trim();
-    if (!url) throw new Error('官方 Image Generation 未回傳圖片 URL。請確認已啟用並完成後端設定。');
+    if (!url) throw new Error(tr('Official Image Generation returned no image URL. Make sure it is enabled and its backend is configured.'));
     return url;
 }
 function renderCandidates(card, scene) {
@@ -401,9 +403,9 @@ function renderCandidates(card, scene) {
     scene.candidates.forEach((url, index) => {
         const button = document.createElement('button');
         button.className = `si-candidate${scene.selectedUrl === url ? ' selected' : ''}`;
-        button.title = `選擇候選圖 ${index + 1}`;
+        button.title = tr('Select candidate {number}', { number: index + 1 });
         const image = document.createElement('img');
-        image.src = url; image.alt = `${scene.title} 候選圖 ${index + 1}`; image.loading = 'lazy';
+        image.src = url; image.alt = tr('{title} candidate {number}', { title: scene.title, number: index + 1 }); image.loading = 'lazy';
         button.append(image);
         button.addEventListener('click', () => { scene.selectedUrl = url; renderCandidates(card, scene); });
         container.append(button);
@@ -422,20 +424,20 @@ function syncScenesFromWorkbench(overlay, scenes) {
 async function persistSelectedScenes(messageId, scenes, overlay) {
     syncScenesFromWorkbench(overlay, scenes);
     const selected = scenes.filter(scene => scene.enabled && scene.selectedUrl);
-    if (!selected.length) return toastr.warning('請先為至少一個場景選擇圖片。');
+    if (!selected.length) return toastr.warning(tr('Select an image for at least one scene first.'));
     const context = getContext();
     const message = context.chat?.[messageId];
-    if (!message) return toastr.error('目標訊息已不存在。');
+    if (!message) return toastr.error(tr('The target message no longer exists.'));
     message.extra ??= {};
     const previous = message.extra[METADATA_KEY]?.scenes ?? [];
     const selectedIds = new Set(selected.map(scene => scene.id));
     const finalScenes = [...previous.filter(scene => !selectedIds.has(scene.id)), ...selected];
     const galleryFolder = getGalleryFolder(context, message);
-    if (!galleryFolder) return toastr.error('找不到目前角色的 Gallery 資料夾。');
+    if (!galleryFolder) return toastr.error(tr("The current character's Gallery folder could not be found."));
 
     const progress = overlay.querySelector('.si-progress');
     const temporaryUrls = new Set([...scenes, ...finalScenes].flatMap(scene => [...(scene.candidates ?? []), scene.selectedUrl].filter(Boolean)));
-    progress.textContent = '正在將選定圖片歸檔至角色 Gallery…';
+    progress.textContent = tr('Archiving selected images to the character Gallery…');
     try {
         for (const scene of finalScenes) {
             if (isTemporaryImageUrl(scene.selectedUrl)) {
@@ -456,13 +458,13 @@ async function persistSelectedScenes(messageId, scenes, overlay) {
 
         const cleanupResults = await Promise.allSettled([...temporaryUrls].filter(isTemporaryImageUrl).map(deleteImageFile));
         const cleanupFailures = cleanupResults.filter(result => result.status === 'rejected').length;
-        if (cleanupFailures) toastr.warning(`${cleanupFailures} 個候選暫存檔無法刪除。`);
+        if (cleanupFailures) toastr.warning(tr('{count} temporary candidate files could not be deleted.', { count: cleanupFailures }));
         closeOverlay();
-        toastr.success(`已插入 ${selected.length} 張圖片並歸檔至「${galleryFolder}」Gallery。`);
+        toastr.success(tr('Inserted {count} images and archived them to the “{folder}” Gallery.', { count: selected.length, folder: galleryFolder }));
     } catch (error) {
         console.error(error);
-        progress.textContent = `歸檔失敗：${error.message}`;
-        toastr.error(error.message, '圖片歸檔失敗');
+        progress.textContent = tr('Archiving failed: {error}', { error: error.message });
+        toastr.error(error.message, tr('Image archiving failed'));
     }
 }
 
@@ -475,7 +477,7 @@ function getGalleryFolder(context, message) {
 
 async function copyImageToGallery(url, folder, sceneId) {
     const imageResponse = await fetch(url);
-    if (!imageResponse.ok) throw new Error(`無法讀取候選圖片：${imageResponse.status}`);
+    if (!imageResponse.ok) throw new Error(tr('Could not read candidate image: {status}', { status: imageResponse.status }));
     const blob = await imageResponse.blob();
     const format = getImageFormat(blob.type, url);
     const image = arrayBufferToBase64(await blob.arrayBuffer());
@@ -489,7 +491,7 @@ async function copyImageToGallery(url, folder, sceneId) {
             filename: `scene_${Date.now()}_${String(sceneId).slice(0, 8)}`,
         }),
     });
-    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || '無法將圖片存入 Gallery。');
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || tr('Could not save the image to the Gallery.'));
     return (await response.json()).path;
 }
 
@@ -499,7 +501,7 @@ async function deleteImageFile(url) {
         headers: getContext().getRequestHeaders(),
         body: JSON.stringify({ path: String(url).replace(/^\//, '') }),
     });
-    if (!response.ok && response.status !== 404) throw new Error(`刪除候選圖片失敗：${response.status}`);
+    if (!response.ok && response.status !== 404) throw new Error(tr('Could not delete candidate image: {status}', { status: response.status }));
 }
 
 function getImageFormat(mimeType, url) {
@@ -537,9 +539,9 @@ function renderMessageScenes(messageId) {
         const placement = findParagraphElement(textContainer, scene, paragraphs);
         const figure = document.createElement('figure');
         figure.className = 'scene-illustrator-inline'; figure.dataset.sceneId = scene.id;
-        const image = document.createElement('img'); image.src = scene.selectedUrl; image.alt = scene.title || '場景圖片'; image.loading = 'lazy';
+        const image = document.createElement('img'); image.src = scene.selectedUrl; image.alt = scene.title || tr('Scene image'); image.loading = 'lazy';
         figure.append(image);
-        if (placement.fallback) { const warning = document.createElement('span'); warning.className = 'si-fallback'; warning.textContent = '原段落已變更，圖片暫時放在訊息末尾。點擊圖片可重新定位。'; figure.append(warning); }
+        if (placement.fallback) { const warning = document.createElement('span'); warning.className = 'si-fallback'; warning.textContent = tr('The original paragraph changed, so the image was placed at the end of the message. Click the image to reposition it.'); figure.append(warning); }
         placement.element.after(figure);
     }
 }
@@ -553,10 +555,10 @@ function renderAllMessages() {
 
 function openManualWorkbench(initialPrompt = '') {
     const messageId = findLatestAssistantMessageId();
-    if (messageId < 0) return toastr.warning('目前聊天沒有可插入圖片的訊息。');
+    if (messageId < 0) return toastr.warning(tr('The current chat has no message where an image can be inserted.'));
     const context = getContext();
     const paragraphs = splitParagraphs(context.chat[messageId].mes);
-    const scene = normalizeAnalysis({ scenes: [{ title: '手動場景', paragraphIndex: Math.max(0, paragraphs.length - 1), anchorText: paragraphs.at(-1)?.slice(0, 40) || '', camera: 'user defined', composition: '', visibleCharacters: [], visibleObjects: [], lighting: '', directPrompt: initialPrompt, booruPrompt: initialPrompt, negativePrompt: '' }], characterUpdates: [] }, paragraphs, messageId).scenes;
+    const scene = normalizeAnalysis({ scenes: [{ title: tr('Manual scene'), paragraphIndex: Math.max(0, paragraphs.length - 1), anchorText: paragraphs.at(-1)?.slice(0, 40) || '', camera: 'user defined', composition: '', visibleCharacters: [], visibleObjects: [], lighting: '', directPrompt: initialPrompt, booruPrompt: initialPrompt, negativePrompt: '' }], characterUpdates: [] }, paragraphs, messageId).scenes;
     openWorkbench(messageId, scene);
 }
 
@@ -571,7 +573,7 @@ function openCharacterStateEditor() {
     closeOverlay();
     const overlay = document.createElement('div');
     overlay.className = 'scene-illustrator-overlay';
-    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>角色外觀狀態</h3><button class="menu_button si-close">關閉</button></div><p>可手動新增角色與任意狀態欄位。勾選鎖定後，後續 AI 分析不會覆寫固定欄位；自訂欄位預設視為使用者指定資訊。</p><div class="si-state-toolbar"><button class="menu_button si-add-character"><i class="fa-solid fa-user-plus"></i> 新增角色</button></div><div class="si-character-list"></div><div class="si-workbench-actions"><button class="menu_button si-reset">全部重設／下次重建</button><button class="menu_button si-save-state">儲存</button></div></section>`;
+    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>${tr('Character appearance state')}</h3><button class="menu_button si-close">${tr('Close')}</button></div><p>${tr('Add characters and custom state fields manually. Locked fields will not be overwritten by later AI analysis; custom fields are treated as user-provided by default.')}</p><div class="si-state-toolbar"><button class="menu_button si-add-character"><i class="fa-solid fa-user-plus"></i> ${tr('Add character')}</button></div><div class="si-character-list"></div><div class="si-workbench-actions"><button class="menu_button si-reset">${tr('Reset all / rebuild next time')}</button><button class="menu_button si-save-state">${tr('Save')}</button></div></section>`;
     const list = overlay.querySelector('.si-character-list');
     for (const [name, character] of Object.entries(state.characters)) list.append(createCharacterEditor(name, character));
     updateCharacterListEmptyState(list);
@@ -579,8 +581,8 @@ function openCharacterStateEditor() {
     overlay.querySelector('.si-add-character').addEventListener('click', () => {
         const existing = [...list.querySelectorAll('[data-character-name]')].map(input => input.value.trim());
         let index = 1;
-        let name = '新角色';
-        while (existing.includes(name)) name = `新角色 ${++index}`;
+        let name = tr('New character');
+        while (existing.includes(name)) name = `${tr('New character')} ${++index}`;
         list.querySelector('.si-empty-state')?.remove();
         const row = createCharacterEditor(name, createEmptyCharacterState());
         list.append(row);
@@ -591,16 +593,16 @@ function openCharacterStateEditor() {
         state.lastAnalyzedMessageId = -1;
         saveChatState(context, state);
         closeOverlay();
-        toastr.info('已重設；你可以手動新增角色，或讓下次分析從可用上下文重建。');
+        toastr.info(tr('Reset complete. Add characters manually or let the next analysis rebuild them from available context.'));
     });
     overlay.querySelector('.si-save-state').addEventListener('click', () => {
         try {
             readCharacterEditors(overlay, state);
             saveChatState(context, state);
             closeOverlay();
-            toastr.success('角色狀態已儲存。');
+            toastr.success(tr('Character state saved.'));
         } catch (error) {
-            toastr.error(error.message, '無法儲存角色狀態');
+            toastr.error(error.message, tr('Could not save character state'));
         }
     });
     document.body.append(overlay);
@@ -610,14 +612,14 @@ function createCharacterEditor(name, character) {
     const normalized = createChatState({ characters: { [name]: character } }).characters[String(name).trim()] ?? createEmptyCharacterState();
     const row = document.createElement('section');
     row.className = 'si-character-row';
-    row.innerHTML = `<div class="si-character-title"><input class="text_pole" data-character-name placeholder="角色名稱"><button class="menu_button si-delete-character" title="刪除角色"><i class="fa-solid fa-trash"></i></button></div><div class="si-fixed-fields"></div><div class="si-custom-fields"></div><button class="menu_button si-add-custom-field"><i class="fa-solid fa-plus"></i> 新增自訂欄位</button>`;
+    row.innerHTML = `<div class="si-character-title"><input class="text_pole" data-character-name placeholder="${tr('Character name')}"><button class="menu_button si-delete-character" title="${tr('Delete character')}"><i class="fa-solid fa-trash"></i></button></div><div class="si-fixed-fields"></div><div class="si-custom-fields"></div><button class="menu_button si-add-custom-field"><i class="fa-solid fa-plus"></i> ${tr('Add custom field')}</button>`;
     row.querySelector('[data-character-name]').value = name;
     const fixedContainer = row.querySelector('.si-fixed-fields');
-    const labels = { appearance: '外觀', hair: '髮型', clothing: '衣著', condition: '狀態／傷勢', accessories: '配件' };
+    const labels = { appearance: tr('Appearance'), hair: tr('Hair'), clothing: tr('Clothing'), condition: tr('Condition / injuries'), accessories: tr('Accessories') };
     for (const key of Object.keys(labels)) {
         const field = document.createElement('label');
         field.className = 'si-character-field';
-        field.innerHTML = `<span>${labels[key]}</span><input class="text_pole" data-field="${key}"><span><input type="checkbox" data-lock="${key}"> 鎖定</span>`;
+        field.innerHTML = `<span>${labels[key]}</span><input class="text_pole" data-field="${key}"><span><input type="checkbox" data-lock="${key}"> ${tr('Lock')}</span>`;
         field.querySelector('[data-field]').value = normalized[key] ?? '';
         field.querySelector('[data-lock]').checked = Boolean(normalized.locked?.[key]);
         fixedContainer.append(field);
@@ -641,7 +643,7 @@ function createCustomFieldEditor(field) {
     const row = document.createElement('div');
     row.className = 'si-custom-field';
     row.dataset.fieldId = String(field.id || crypto.randomUUID());
-    row.innerHTML = `<input class="text_pole" data-custom-label placeholder="欄位名稱，例如：排球隊位置"><input class="text_pole" data-custom-value placeholder="狀態內容"><label><input type="checkbox" data-custom-lock> 鎖定</label><button class="menu_button si-delete-custom" title="刪除欄位"><i class="fa-solid fa-xmark"></i></button>`;
+    row.innerHTML = `<input class="text_pole" data-custom-label placeholder="${tr('Field name, e.g. volleyball position')}"><input class="text_pole" data-custom-value placeholder="${tr('State value')}"><label><input type="checkbox" data-custom-lock> ${tr('Lock')}</label><button class="menu_button si-delete-custom" title="${tr('Delete field')}"><i class="fa-solid fa-xmark"></i></button>`;
     row.querySelector('[data-custom-label]').value = field.label ?? '';
     row.querySelector('[data-custom-value]').value = field.value ?? '';
     row.querySelector('[data-custom-lock]').checked = field.locked !== false;
@@ -653,8 +655,8 @@ function readCharacterEditors(overlay, state) {
     const characters = {};
     for (const row of overlay.querySelectorAll('.si-character-row')) {
         const name = row.querySelector('[data-character-name]').value.trim();
-        if (!name) throw new Error('角色名稱不能是空白。');
-        if (characters[name]) throw new Error(`角色名稱「${name}」重複。`);
+        if (!name) throw new Error(tr('Character name cannot be blank.'));
+        if (characters[name]) throw new Error(tr('Character name “{name}” is duplicated.', { name }));
         const character = createEmptyCharacterState();
         row.querySelectorAll('[data-field]').forEach(input => { character[input.dataset.field] = input.value.trim(); });
         row.querySelectorAll('[data-lock]').forEach(input => { character.locked[input.dataset.lock] = input.checked; });
@@ -674,7 +676,7 @@ function updateCharacterListEmptyState(list) {
     if (!list.querySelector('.si-character-row')) {
         const empty = document.createElement('p');
         empty.className = 'si-empty-state';
-        empty.textContent = '尚無角色狀態。你可以立即按「新增角色」手動建立，不必等待 AI 分析。';
+        empty.textContent = tr('No character state yet. Click “Add character” to create one now; you do not need to wait for AI analysis.');
         list.append(empty);
     }
 }
@@ -700,7 +702,7 @@ function closeOverlay() { document.querySelectorAll('.scene-illustrator-overlay'
 
 function populateProfileSelect() {
     const select = document.querySelector('#si_profile'); if (!select) return;
-    const old = settings.connectionProfileId; select.replaceChildren(new Option('請選擇', ''));
+    const old = settings.connectionProfileId; select.replaceChildren(new Option(tr('Select a profile'), ''));
     try { ConnectionManagerRequestService.getSupportedProfiles().forEach(profile => select.add(new Option(profile.name || profile.id, profile.id))); } catch (error) { console.warn('Scene Illustrator: profiles unavailable', error); }
     select.value = old;
 }
@@ -723,7 +725,7 @@ function exportSettings() {
 
 async function importSettings(event) {
     const file = event.target.files?.[0]; if (!file) return;
-    try { const value = normalizeSettings(JSON.parse(await file.text())); Object.assign(extension_settings[MODULE_NAME], DEFAULT_SETTINGS, value); settings = extension_settings[MODULE_NAME]; saveSettingsDebounced(); populateProfileSelect(); syncSettingsUi(); toastr.success('設定已匯入。'); }
-    catch (error) { toastr.error(error.message, '設定匯入失敗'); }
+    try { const value = normalizeSettings(JSON.parse(await file.text())); Object.assign(extension_settings[MODULE_NAME], DEFAULT_SETTINGS, value); settings = extension_settings[MODULE_NAME]; saveSettingsDebounced(); populateProfileSelect(); syncSettingsUi(); toastr.success(tr('Settings imported.')); }
+    catch (error) { toastr.error(error.message, tr('Settings import failed')); }
     event.target.value = '';
 }
