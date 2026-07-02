@@ -1,49 +1,84 @@
-﻿# Scene Illustrator for SillyTavern
+# Scene Illustrator for SillyTavern
 
-一個以「場景理解與視覺連續性」為核心的 SillyTavern 1.18.0+ 圖像生成 extension。它沿用官方 Image Generation 的 ComfyUI、Automatic1111、Google、OpenAI 等後端設定，補上場景挑選、角色外觀狀態、提示詞檢查、多張候選與段落內嵌。
+Scene Illustrator is an image-generation extension for SillyTavern 1.18.0 and later, designed around scene comprehension and visual continuity. It builds on the backend configuration provided by SillyTavern's official Image Generation extension—including ComfyUI, AUTOMATIC1111, Google, and OpenAI—and adds scene selection, persistent character appearance, prompt review, multiple image candidates, and inline image insertion.
 
-## 安裝
+> This document is also available in [Traditional Chinese](docs/README.zh-TW.md).
 
-1. 確認 SillyTavern 已更新至 1.18.0 或更新版本。
-2. 將本 repository 放到 `SillyTavern/data/<你的使用者>/extensions/scene-illustrator`，或把 Git repository URL 貼進「Extensions → Install Extension」。
-3. 重新載入 SillyTavern。
-4. 在官方 Image Generation 面板設定並測試 ComfyUI 或其他圖像後端。
-5. 在 Scene Illustrator 設定中選擇分析模型、提示詞風格與候選數量。
+## Features
 
-## 使用方式
+- Analyze an AI response and identify one to three scenes suitable for illustration.
+- Generate an image from a selected passage or a fully manual prompt.
+- Review and edit both direct and booru-style prompts before generation.
+- Maintain visual character state, including hairstyle, clothing, injuries, accessories, and custom fields.
+- Generate multiple candidates for each scene and select the preferred result.
+- Archive selected images in the character Gallery and insert them into the original response as editable Markdown.
+- Reuse the image backends and credentials already configured in SillyTavern.
 
-- AI 訊息的動作選單會出現魔杖按鈕；按下後分析該回應的 1–3 個場景。
-- 在訊息中反白文字後，按「依選取內容生成」建立單一場景。
-- 在 extension 設定面板按「完全手動」，或使用 `/scene-image your prompt`。
-- 工作台會先展示 direct 與 booru prompt。編輯確認後才會依序呼叫官方 `/imagine`。
-- 每個場景選定一張候選圖，再按「插入已選圖片」。選中圖會歸檔到角色 Gallery，並以帶識別標記的 Markdown 寫入原回應；編輯回應時可直接看見和調整圖片連結。未選候選的暫存檔會自動刪除。
+## Requirements
 
-## 分析模型
+- SillyTavern 1.18.0 or later
+- The official SillyTavern Image Generation extension
+- A configured and working image-generation backend
 
-- 「目前聊天模型」使用 SillyTavern 原生 structured generation。
-- 「Connection Profile」可使用獨立的 Chat Completion 或 Text Completion profile；金鑰仍由 SillyTavern 管理。
-- 無效、過短或格式錯誤的分析結果會自動修復一次，仍不合格則停止而不送出圖像請求。
+## Installation
 
-## 角色狀態
+1. Update SillyTavern to version 1.18.0 or later.
+2. Install this repository through **Extensions → Install Extension** using its Git repository URL. Alternatively, clone or copy it to:
 
-extension 會在聊天 metadata 維護髮型、衣著、傷勢、配件等視覺快照。設定面板的「角色狀態」可在 AI 分析前手動新增角色，也可為每位角色新增任意自訂欄位、重新命名、刪除或鎖定資訊。重設後，下次分析會從角色卡、persona、tracker metadata、畫面上可見的 tracker 文字、啟用的 World Info 與目標訊息前文重建。角色狀態缺失或損壞不會阻止場景生成。
+   ```text
+   SillyTavern/data/<user>/extensions/scene-illustrator
+   ```
 
-## Slash commands
+3. Reload SillyTavern.
+4. Open the official Image Generation panel and configure and test ComfyUI or another supported backend.
+5. Open the Scene Illustrator settings and choose an analysis model, prompt style, and number of candidates.
 
-- `/scene-image [prompt]`：開啟手動工作台。
-- `/scene-analyze`：分析最近一則 AI 回應。
+## Usage
 
-## 開發與測試
+The wand button in an AI message's action menu analyzes that response and proposes one to three scenes. To generate from a specific passage, select the text in the message and choose the generation action for the selected content.
 
-```powershell
-node --check index.js
-node --test
+For a fully manual workflow, use the Scene Illustrator settings panel or run:
+
+```text
+/scene-image your prompt
 ```
 
-目前的自動測試涵蓋中英文段落、JSON 修復解析、過短提示詞、手動角色與自訂欄位、損壞狀態 fallback、長對話／tracker context、角色欄位鎖定、slash command escaping、設定 migration，以及鏡頭可見性規則。
+The workspace displays direct and booru-style prompts for review. After confirmation, Scene Illustrator submits them through SillyTavern's official `/imagine` command. Select one candidate for each scene, then choose **Insert Selected Images**. Selected images are archived in the character Gallery and inserted into the original response as tagged Markdown. Unselected temporary candidates are removed automatically.
 
-## 已知界線
+## Analysis Models
 
-- 同一場景的候選圖會以同一份凍結 Prompt 並行批次提交；不同場景仍依序處理，避免一次塞入過多工作。
-- 「取消後續生成」會停止後續場景；已提交的同場景批次可由官方 Image Generation 的取消提示停止。
-- 新圖片直接存在回應 Markdown 中；手動刪除 Markdown 圖片後，metadata 仍保留時會暫時用相容模式顯示，直到下次重新儲存場景。
+- **Current chat model** uses SillyTavern's native structured generation.
+- **Connection Profile** uses a separate Chat Completion or Text Completion profile while leaving credential management to SillyTavern.
+- Invalid, incomplete, or malformed analysis output is repaired once automatically. If the repaired result is still invalid, generation stops before any image request is submitted.
+
+## Character State
+
+Scene Illustrator stores visual snapshots—such as hairstyles, clothing, injuries, and accessories—in the chat metadata. The **Character State** section allows users to add characters before analysis and to add, rename, remove, or lock custom fields for each character.
+
+After a reset, the next analysis reconstructs character state from available character cards, personas, tracker metadata, visible tracker text, enabled World Info, and conversation context preceding the target message. Missing or corrupted character state does not prevent scene generation.
+
+## Slash Commands
+
+- `/scene-image [prompt]` opens the manual generation workspace.
+- `/scene-analyze` analyzes the most recent AI response.
+
+## Development
+
+Node.js 20 or later is recommended for local validation.
+
+```powershell
+npm run check
+npm test
+```
+
+The automated test suite covers Chinese and English paragraphs, repaired JSON parsing, underspecified prompts, manual characters and custom fields, corrupted-state fallbacks, long conversation and tracker context, locked character fields, slash-command escaping, settings migration, and camera-visibility rules.
+
+## Current Limitations
+
+- Candidates for the same scene are submitted concurrently using one frozen prompt. Separate scenes are processed sequentially to avoid overloading the backend.
+- **Cancel Remaining Generation** prevents subsequent scenes from being submitted. An already submitted candidate batch can be stopped through the cancellation control provided by the official Image Generation extension.
+- Images are stored directly in response Markdown. If an image is removed manually while its metadata remains, compatibility rendering may persist until the scene is saved again.
+
+## License
+
+This project is distributed under the [MIT License](LICENSE).
