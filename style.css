@@ -30,3 +30,11 @@
 
 .scene-illustrator-markdown { cursor: pointer; }
 
+
+.si-state-toolbar { display: flex; justify-content: flex-start; margin: .65rem 0; }
+.si-character-title { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center; margin-bottom: .55rem; }
+.si-character-title [data-character-name] { font-size: 1.05rem; font-weight: 700; }
+.si-custom-fields { margin: .55rem 0; }
+.si-custom-field { display: grid; grid-template-columns: minmax(8rem, .7fr) minmax(12rem, 1.3fr) auto auto; gap: .4rem; align-items: center; margin: .35rem 0; padding-left: .65rem; border-left: 3px solid var(--SmartThemeQuoteColor, #6cf); }
+.si-empty-state { padding: 1rem; border: 1px dashed var(--SmartThemeBorderColor, #666); border-radius: 7px; opacity: .8; text-align: center; }
+@media (max-width: 650px) { .si-custom-field { grid-template-columns: 1fr; padding: .55rem; } }

@@ -6,7 +6,7 @@ import { SlashCommandParser } from '/scripts/slash-commands/SlashCommandParser.j
 import { SlashCommand } from '/scripts/slash-commands/SlashCommand.js';
 import { DEFAULT_SETTINGS, METADATA_KEY, METADATA_VERSION, MODULE_NAME } from './src/constants.js';
 import {
-    buildImagineCommand, composeNegativePrompt, composePromptPrefix, createChatState, findParagraphElement, hasSceneMarkdown, isTemporaryImageUrl, mergeCharacterUpdates, stripAllSceneMarkdown, upsertSceneMarkdown,
+    buildImagineCommand, coerceAnalysisPayload, composeNegativePrompt, composePromptPrefix, createChatState, createEmptyCharacterState, findParagraphElement, hasSceneMarkdown, isTemporaryImageUrl, mergeCharacterUpdates, stripAllSceneMarkdown, upsertSceneMarkdown,
     normalizeAnalysis, normalizeSettings, parseAnalysisResponse, scenePrompt, splitParagraphs, validateAnalysis,
 } from './src/core.js';
 import { ANALYSIS_SCHEMA, SYSTEM_PROMPT, buildAnalysisPrompt, buildRepairPrompt } from './src/prompts.js';
@@ -149,17 +149,17 @@ async function analyzeMessage(messageId, selectionText) {
         const chatState = getChatState(context);
         const prompt = buildAnalysisPrompt({
             selectionText, maxScenes: selectionText ? 1 : settings.maxScenes, paragraphs,
-            characterState: chatState.characters, characterReference: await collectCharacterReference(context),
-            chatContext: collectChatContext(context, messageId, chatState.lastAnalyzedMessageId),
+            characterState: chatState.characters, characterReference: await collectCharacterReference(context, messageId),
+            chatContext: collectChatContext(context, messageId),
         });
         let raw = await requestAnalysis(prompt, controller.signal);
         let parsed;
         let errors;
-        try { parsed = parseAnalysisResponse(raw); errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes); }
+        try { parsed = coerceAnalysisPayload(parseAnalysisResponse(raw)); errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes); }
         catch (error) { errors = [error.message]; }
         if (errors.length) {
             raw = await requestAnalysis(buildRepairPrompt(typeof raw === 'string' ? raw : JSON.stringify(raw), errors), controller.signal);
-            parsed = parseAnalysisResponse(raw);
+            parsed = coerceAnalysisPayload(parseAnalysisResponse(raw));
             errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes);
             if (errors.length) throw new Error(errors.join('\n'));
         }
@@ -190,35 +190,83 @@ async function requestAnalysis(userPrompt, signal) {
     return await generateRawData({ prompt: userPrompt, systemPrompt: SYSTEM_PROMPT, responseLength: settings.maxAnalysisTokens, jsonSchema: ANALYSIS_SCHEMA });
 }
 
-function collectChatContext(context, targetId, lastAnalyzedId) {
-    const start = Math.max(0, Math.min(targetId, Math.max(lastAnalyzedId + 1, targetId - settings.contextMessages + 1)));
-    return context.chat.slice(start, targetId + 1).map((message, offset) => {
+function collectChatContext(context, targetId) {
+    const chat = Array.isArray(context.chat) ? context.chat : [];
+    const start = Math.max(0, targetId - settings.contextMessages + 1);
+    let trackerBudget = 12000;
+    const joined = chat.slice(start, targetId + 1).map((message, offset) => {
         const id = start + offset;
         const role = message.is_user ? 'user' : message.is_system ? 'system' : 'character';
-        return `[message ${id}; ${role}; ${message.name || ''}] ${message.mes || ''}`;
+        const tracker = trackerBudget > 0 ? serializeTrackerData(message, Math.min(1500, trackerBudget)) : '';
+        trackerBudget -= tracker.length;
+        return `[message ${id}; ${role}; ${message.name || ''}] ${message.mes || ''}${tracker ? `\n[tracker/state metadata] ${tracker}` : ''}`;
     }).join('\n\n');
+    const maxCharacters = 60000;
+    return joined.length > maxCharacters ? `[earlier context truncated]\n${joined.slice(-maxCharacters)}` : joined;
 }
 
-async function collectCharacterReference(context) {
+async function collectCharacterReference(context, targetId) {
     const references = [];
-    const named = [...new Set(context.chat.slice(-settings.contextMessages).map(message => message.name).filter(Boolean))];
-    const activeCharacters = context.groupId
-        ? context.characters.filter(character => named.includes(character?.name))
-        : [context.characters?.[context.characterId]].filter(Boolean);
-    for (const character of activeCharacters) {
-        references.push(JSON.stringify({ name: character.name, description: character.description, scenario: character.scenario, personality: character.personality }));
-    }
-    if (power_user.persona_description) references.push(`User persona: ${power_user.persona_description}`);
     try {
-        const chatForWorldInfo = context.chat.map(message => `${message.name || ''}: ${message.mes || ''}`).reverse();
-        const world = await context.getWorldInfoPrompt(chatForWorldInfo, context.maxContext, true);
-        const lore = [world?.worldInfoBefore, world?.worldInfoAfter].filter(Boolean).join('\n');
-        if (lore) references.push(`Activated world info: ${lore}`);
-    } catch (error) { console.warn('Scene Illustrator: world info scan failed', error); }
-    references.push(`Active names: ${named.join(', ')}`);
+        const chat = Array.isArray(context.chat) ? context.chat : [];
+        const characters = Array.isArray(context.characters) ? context.characters : [];
+        const start = Math.max(0, targetId - settings.contextMessages + 1);
+        const nearbyChat = chat.slice(start, targetId + 1);
+        const named = [...new Set(nearbyChat.map(message => message?.name).filter(Boolean))];
+        const activeCharacters = context.groupId
+            ? characters.filter(character => named.includes(character?.name))
+            : [characters[context.characterId]].filter(Boolean);
+        for (const character of activeCharacters) {
+            references.push(JSON.stringify({ name: character.name, description: character.description, scenario: character.scenario, personality: character.personality }));
+        }
+        if (power_user.persona_description) references.push(`User persona: ${power_user.persona_description}`);
+        try {
+            const chatForWorldInfo = nearbyChat.map(message => `${message.name || ''}: ${message.mes || ''}`).reverse();
+            const world = await context.getWorldInfoPrompt(chatForWorldInfo, context.maxContext, true);
+            const lore = [world?.worldInfoBefore, world?.worldInfoAfter].filter(Boolean).join('\n');
+            if (lore) references.push(`Activated world info: ${lore.slice(0, 12000)}`);
+        } catch (error) { console.warn('Scene Illustrator: world info scan failed; continuing without it.', error); }
+        const rendered = document.querySelector(`#chat .mes[mesid="${targetId}"] .mes_text`)?.innerText?.trim();
+        const raw = String(chat[targetId]?.mes ?? '').trim();
+        if (rendered && rendered !== raw) references.push(`Rendered target text (may contain tracker output): ${rendered.slice(0, 10000)}`);
+        references.push(`Active names: ${named.join(', ')}`);
+    } catch (error) {
+        console.warn('Scene Illustrator: character reference unavailable; continuing from chat text.', error);
+        references.push('Character reference unavailable. Infer only supported visual facts from the target and recent chat; do not fail or invent details.');
+    }
     return references.join('\n');
 }
 
+function serializeTrackerData(message, maxLength) {
+    const source = {};
+    const extra = message?.extra;
+    if (extra && typeof extra === 'object') {
+        for (const [key, value] of Object.entries(extra)) {
+            if ([METADATA_KEY, 'media', 'image', 'inline_image', 'file'].includes(key)) continue;
+            source[key] = value;
+        }
+    }
+    if (message?.variables && typeof message.variables === 'object') source.variables = message.variables;
+    if (!Object.keys(source).length) return '';
+    const seen = new WeakSet();
+    try {
+        return JSON.stringify(source, (key, value) => {
+            if (/base64|data_uri|thumbnail|avatar/i.test(key)) return undefined;
+            if (typeof value === 'string') {
+                if (/^data:(?:image|audio|video)\//i.test(value)) return '[binary omitted]';
+                return value.length > 1000 ? `${value.slice(0, 1000)}…` : value;
+            }
+            if (value && typeof value === 'object') {
+                if (seen.has(value)) return '[circular]';
+                seen.add(value);
+            }
+            return value;
+        }).slice(0, maxLength);
+    } catch (error) {
+        console.warn('Scene Illustrator: tracker metadata could not be serialized.', error);
+        return '';
+    }
+}
 function openWorkbench(messageId, scenes) {
     closeOverlay();
     const overlay = document.createElement('div');
@@ -518,40 +566,134 @@ function openExistingScene(messageId, sceneId) {
 }
 
 function openCharacterStateEditor() {
-    const context = getContext(); const state = getChatState(context); closeOverlay();
-    const overlay = document.createElement('div'); overlay.className = 'scene-illustrator-overlay';
-    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>角色外觀狀態</h3><button class="menu_button si-close">關閉</button></div><p>勾選鎖定後，後續分析不會覆寫該欄位。</p><div class="si-character-list"></div><div class="si-workbench-actions"><button class="menu_button si-reset">重設／下次重建</button><button class="menu_button si-save-state">儲存</button></div></section>`;
+    const context = getContext();
+    const state = getChatState(context);
+    closeOverlay();
+    const overlay = document.createElement('div');
+    overlay.className = 'scene-illustrator-overlay';
+    overlay.innerHTML = `<section class="scene-illustrator-workbench"><div class="si-workbench-head"><h3>角色外觀狀態</h3><button class="menu_button si-close">關閉</button></div><p>可手動新增角色與任意狀態欄位。勾選鎖定後，後續 AI 分析不會覆寫固定欄位；自訂欄位預設視為使用者指定資訊。</p><div class="si-state-toolbar"><button class="menu_button si-add-character"><i class="fa-solid fa-user-plus"></i> 新增角色</button></div><div class="si-character-list"></div><div class="si-workbench-actions"><button class="menu_button si-reset">全部重設／下次重建</button><button class="menu_button si-save-state">儲存</button></div></section>`;
     const list = overlay.querySelector('.si-character-list');
     for (const [name, character] of Object.entries(state.characters)) list.append(createCharacterEditor(name, character));
-    if (!list.children.length) list.textContent = '尚無角色快照；完成一次場景分析後會自動建立。';
+    updateCharacterListEmptyState(list);
     overlay.querySelector('.si-close').addEventListener('click', closeOverlay);
-    overlay.querySelector('.si-reset').addEventListener('click', () => { state.characters = {}; state.lastAnalyzedMessageId = -1; saveChatState(context, state); closeOverlay(); toastr.info('已重設；下次分析會從可用上下文重建。'); });
-    overlay.querySelector('.si-save-state').addEventListener('click', () => { readCharacterEditors(overlay, state); saveChatState(context, state); closeOverlay(); toastr.success('角色狀態已儲存。'); });
+    overlay.querySelector('.si-add-character').addEventListener('click', () => {
+        const existing = [...list.querySelectorAll('[data-character-name]')].map(input => input.value.trim());
+        let index = 1;
+        let name = '新角色';
+        while (existing.includes(name)) name = `新角色 ${++index}`;
+        list.querySelector('.si-empty-state')?.remove();
+        const row = createCharacterEditor(name, createEmptyCharacterState());
+        list.append(row);
+        row.querySelector('[data-character-name]')?.focus();
+    });
+    overlay.querySelector('.si-reset').addEventListener('click', () => {
+        state.characters = {};
+        state.lastAnalyzedMessageId = -1;
+        saveChatState(context, state);
+        closeOverlay();
+        toastr.info('已重設；你可以手動新增角色，或讓下次分析從可用上下文重建。');
+    });
+    overlay.querySelector('.si-save-state').addEventListener('click', () => {
+        try {
+            readCharacterEditors(overlay, state);
+            saveChatState(context, state);
+            closeOverlay();
+            toastr.success('角色狀態已儲存。');
+        } catch (error) {
+            toastr.error(error.message, '無法儲存角色狀態');
+        }
+    });
     document.body.append(overlay);
 }
 
 function createCharacterEditor(name, character) {
-    const row = document.createElement('div'); row.className = 'si-character-row'; row.dataset.character = name;
-    const title = document.createElement('strong'); title.textContent = name; row.append(title);
-    for (const key of ['appearance', 'hair', 'clothing', 'condition', 'accessories']) {
-        const field = document.createElement('label'); field.className = 'si-character-field';
-        field.innerHTML = `<span>${{ appearance: '外觀', hair: '髮型', clothing: '衣著', condition: '狀態／傷勢', accessories: '配件' }[key]}</span><input class="text_pole" data-field="${key}"><span><input type="checkbox" data-lock="${key}"> 鎖定</span>`;
-        field.querySelector('[data-field]').value = character[key] ?? '';
-        field.querySelector('[data-lock]').checked = Boolean(character.locked?.[key]); row.append(field);
+    const normalized = createChatState({ characters: { [name]: character } }).characters[String(name).trim()] ?? createEmptyCharacterState();
+    const row = document.createElement('section');
+    row.className = 'si-character-row';
+    row.innerHTML = `<div class="si-character-title"><input class="text_pole" data-character-name placeholder="角色名稱"><button class="menu_button si-delete-character" title="刪除角色"><i class="fa-solid fa-trash"></i></button></div><div class="si-fixed-fields"></div><div class="si-custom-fields"></div><button class="menu_button si-add-custom-field"><i class="fa-solid fa-plus"></i> 新增自訂欄位</button>`;
+    row.querySelector('[data-character-name]').value = name;
+    const fixedContainer = row.querySelector('.si-fixed-fields');
+    const labels = { appearance: '外觀', hair: '髮型', clothing: '衣著', condition: '狀態／傷勢', accessories: '配件' };
+    for (const key of Object.keys(labels)) {
+        const field = document.createElement('label');
+        field.className = 'si-character-field';
+        field.innerHTML = `<span>${labels[key]}</span><input class="text_pole" data-field="${key}"><span><input type="checkbox" data-lock="${key}"> 鎖定</span>`;
+        field.querySelector('[data-field]').value = normalized[key] ?? '';
+        field.querySelector('[data-lock]').checked = Boolean(normalized.locked?.[key]);
+        fixedContainer.append(field);
     }
+    const customContainer = row.querySelector('.si-custom-fields');
+    for (const field of normalized.customFields ?? []) customContainer.append(createCustomFieldEditor(field));
+    row.querySelector('.si-add-custom-field').addEventListener('click', () => {
+        const custom = createCustomFieldEditor({ id: crypto.randomUUID(), label: '', value: '', locked: true });
+        customContainer.append(custom);
+        custom.querySelector('[data-custom-label]')?.focus();
+    });
+    row.querySelector('.si-delete-character').addEventListener('click', () => {
+        const list = row.parentElement;
+        row.remove();
+        updateCharacterListEmptyState(list);
+    });
+    return row;
+}
+
+function createCustomFieldEditor(field) {
+    const row = document.createElement('div');
+    row.className = 'si-custom-field';
+    row.dataset.fieldId = String(field.id || crypto.randomUUID());
+    row.innerHTML = `<input class="text_pole" data-custom-label placeholder="欄位名稱，例如：排球隊位置"><input class="text_pole" data-custom-value placeholder="狀態內容"><label><input type="checkbox" data-custom-lock> 鎖定</label><button class="menu_button si-delete-custom" title="刪除欄位"><i class="fa-solid fa-xmark"></i></button>`;
+    row.querySelector('[data-custom-label]').value = field.label ?? '';
+    row.querySelector('[data-custom-value]').value = field.value ?? '';
+    row.querySelector('[data-custom-lock]').checked = field.locked !== false;
+    row.querySelector('.si-delete-custom').addEventListener('click', () => row.remove());
     return row;
 }
 
 function readCharacterEditors(overlay, state) {
-    overlay.querySelectorAll('.si-character-row').forEach(row => {
-        const character = state.characters[row.dataset.character]; character.locked ??= {};
+    const characters = {};
+    for (const row of overlay.querySelectorAll('.si-character-row')) {
+        const name = row.querySelector('[data-character-name]').value.trim();
+        if (!name) throw new Error('角色名稱不能是空白。');
+        if (characters[name]) throw new Error(`角色名稱「${name}」重複。`);
+        const character = createEmptyCharacterState();
         row.querySelectorAll('[data-field]').forEach(input => { character[input.dataset.field] = input.value.trim(); });
         row.querySelectorAll('[data-lock]').forEach(input => { character.locked[input.dataset.lock] = input.checked; });
-    });
+        character.customFields = [...row.querySelectorAll('.si-custom-field')].map(custom => ({
+            id: custom.dataset.fieldId || crypto.randomUUID(),
+            label: custom.querySelector('[data-custom-label]').value.trim(),
+            value: custom.querySelector('[data-custom-value]').value.trim(),
+            locked: custom.querySelector('[data-custom-lock]').checked,
+        })).filter(field => field.label || field.value);
+        characters[name] = character;
+    }
+    state.characters = characters;
 }
 
-function getChatState(context) { return createChatState(context.chatMetadata?.[METADATA_KEY]); }
-function saveChatState(context, state) { context.chatMetadata[METADATA_KEY] = state; context.saveMetadataDebounced(); }
+function updateCharacterListEmptyState(list) {
+    list.querySelector('.si-empty-state')?.remove();
+    if (!list.querySelector('.si-character-row')) {
+        const empty = document.createElement('p');
+        empty.className = 'si-empty-state';
+        empty.textContent = '尚無角色狀態。你可以立即按「新增角色」手動建立，不必等待 AI 分析。';
+        list.append(empty);
+    }
+}
+function getChatState(context) {
+    try {
+        return createChatState(context?.chatMetadata?.[METADATA_KEY]);
+    } catch (error) {
+        console.warn('Scene Illustrator: invalid character state snapshot; using an empty state.', error);
+        return createChatState();
+    }
+}
+function saveChatState(context, state) {
+    if (!context.chatMetadata || typeof context.chatMetadata !== 'object') {
+        console.warn('Scene Illustrator: chat metadata is unavailable; state will be used for this session only.');
+        return;
+    }
+    context.chatMetadata[METADATA_KEY] = createChatState(state);
+    context.saveMetadataDebounced?.();
+}
 function findLatestAssistantMessageId() { const chat = getContext().chat ?? []; for (let i = chat.length - 1; i >= 0; i--) if (!chat[i].is_user && !chat[i].is_system) return i; return chat.length - 1; }
 function cancelActiveJob() { if (!activeJob) return; activeJob.cancelled = true; activeJob.controller?.abort(); }
 function closeOverlay() { document.querySelectorAll('.scene-illustrator-overlay').forEach(element => element.remove()); }
@@ -585,19 +727,3 @@ async function importSettings(event) {
     catch (error) { toastr.error(error.message, '設定匯入失敗'); }
     event.target.value = '';
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

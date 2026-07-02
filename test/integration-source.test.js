@@ -39,3 +39,24 @@ test('selected images are archived, embedded as Markdown, and temporary files ar
     assert.match(source, /upsertSceneMarkdown\(nextText, scene\)/);
     assert.match(source, /context\.updateMessageBlock\(messageId, message\)/);
 });
+
+test('long-chat analysis always reads context before the selected historical message', () => {
+    assert.match(source, /targetId - settings\.contextMessages \+ 1/);
+    assert.doesNotMatch(source, /lastAnalyzedId \+ 1/);
+    assert.match(source, /tracker\/state metadata/);
+    assert.match(source, /Rendered target text \(may contain tracker output\)/);
+});
+
+test('character state is optional and corrupted snapshots fall back safely', () => {
+    assert.match(source, /character reference unavailable; continuing from chat text/);
+    assert.match(source, /invalid character state snapshot; using an empty state/);
+    assert.match(source, /coerceAnalysisPayload\(parseAnalysisResponse\(raw\)\)/);
+});
+
+test('state editor can add characters and custom fields before AI analysis', () => {
+    assert.match(source, /新增角色/);
+    assert.match(source, /新增自訂欄位/);
+    assert.match(source, /createEmptyCharacterState\(\)/);
+    assert.match(source, /data-custom-label/);
+    assert.match(source, /data-custom-value/);
+});

@@ -1,7 +1,7 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildImagineCommand, buildSceneMarkdown, composeNegativePrompt, composePromptPrefix, createChatState, hasSceneMarkdown, isTemporaryImageUrl, mergeCharacterUpdates, normalizeSettings, stripAllSceneMarkdown, upsertSceneMarkdown,
+    buildImagineCommand, buildSceneMarkdown, coerceAnalysisPayload, composeNegativePrompt, composePromptPrefix, createChatState, createEmptyCharacterState, hasSceneMarkdown, isTemporaryImageUrl, mergeCharacterUpdates, normalizeSettings, stripAllSceneMarkdown, upsertSceneMarkdown,
     parseAnalysisResponse, quoteSlashArgument, scenePrompt, splitParagraphs, validateAnalysis,
 } from '../src/core.js';
 import { SYSTEM_PROMPT, buildAnalysisPrompt } from '../src/prompts.js';
@@ -101,4 +101,31 @@ test('writes, replaces, and strips editable scene Markdown blocks', () => {
     assert.equal((replaced.match(/scene-illustrator:abc-123/g) ?? []).length, 2);
     assert.match(replaced, /new\.png/);
     assert.equal(stripAllSceneMarkdown(replaced), 'Paragraph A\n\nParagraph B');
+});
+
+test('manual characters and arbitrary custom fields survive state migration', () => {
+    const state = createChatState({ characters: { Alice: {
+        hair: 'high ponytail',
+        customFields: [{ id: 'role', label: 'Team position', value: 'outside hitter', locked: true }],
+    } } });
+    assert.equal(state.characters.Alice.hair, 'high ponytail');
+    assert.deepEqual(state.characters.Alice.customFields[0], { id: 'role', label: 'Team position', value: 'outside hitter', locked: true });
+    assert.deepEqual(createEmptyCharacterState().customFields, []);
+});
+
+test('AI updates preserve user custom fields', () => {
+    const current = createChatState({ characters: { Alice: {
+        appearance: 'athletic girl',
+        customFields: [{ id: 'uniform', label: 'Jersey number', value: '7', locked: true }],
+    } } }).characters;
+    const result = mergeCharacterUpdates(current, [{ name: 'Alice', appearance: 'tall athletic girl', hair: '', clothing: '', condition: '', accessories: '' }]);
+    assert.equal(result.Alice.appearance, 'tall athletic girl');
+    assert.equal(result.Alice.customFields[0].value, '7');
+});
+
+test('missing character updates and visible-character state do not block a valid scene', () => {
+    const payload = coerceAnalysisPayload({ scenes: [{ ...validScene(), visibleCharacters: undefined }], characterUpdates: undefined });
+    assert.deepEqual(payload.characterUpdates, []);
+    assert.deepEqual(payload.scenes[0].visibleCharacters, []);
+    assert.deepEqual(validateAnalysis(payload, 2, 3), []);
 });

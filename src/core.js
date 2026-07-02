@@ -14,7 +14,56 @@ export function normalizeSettings(value = {}) {
 }
 
 export function createChatState(value = {}) {
-    return { ...structuredClone(EMPTY_CHAT_STATE), ...value, version: METADATA_VERSION, characters: value.characters && typeof value.characters === 'object' ? value.characters : {} };
+    const source = value && typeof value === 'object' ? value : {};
+    const characters = {};
+    for (const [name, character] of Object.entries(source.characters ?? {})) {
+        const cleanName = String(name ?? '').trim();
+        if (cleanName) characters[cleanName] = normalizeCharacterState(character);
+    }
+    return {
+        ...structuredClone(EMPTY_CHAT_STATE),
+        ...source,
+        version: METADATA_VERSION,
+        lastAnalyzedMessageId: Number.isInteger(source.lastAnalyzedMessageId) ? source.lastAnalyzedMessageId : -1,
+        characters,
+    };
+}
+
+export function createEmptyCharacterState() {
+    return normalizeCharacterState({});
+}
+
+export function normalizeCharacterState(value = {}) {
+    const source = value && typeof value === 'object' ? value : {};
+    const locked = source.locked && typeof source.locked === 'object' ? { ...source.locked } : {};
+    const customFields = Array.isArray(source.customFields) ? source.customFields.map((field, index) => ({
+        id: String(field?.id || `custom-${index}`),
+        label: String(field?.label ?? '').trim(),
+        value: String(field?.value ?? '').trim(),
+        locked: field?.locked !== false,
+    })).filter(field => field.label || field.value) : [];
+    return {
+        appearance: String(source.appearance ?? ''),
+        hair: String(source.hair ?? ''),
+        clothing: String(source.clothing ?? ''),
+        condition: String(source.condition ?? ''),
+        accessories: String(source.accessories ?? ''),
+        locked,
+        customFields,
+    };
+}
+
+export function coerceAnalysisPayload(value) {
+    if (!value || typeof value !== 'object') return value;
+    value.characterUpdates = Array.isArray(value.characterUpdates) ? value.characterUpdates : [];
+    if (Array.isArray(value.scenes)) {
+        for (const scene of value.scenes) {
+            scene.visibleCharacters = Array.isArray(scene.visibleCharacters) ? scene.visibleCharacters : [];
+            scene.visibleObjects = Array.isArray(scene.visibleObjects) ? scene.visibleObjects : [];
+            scene.negativePrompt = String(scene.negativePrompt ?? '');
+        }
+    }
+    return value;
 }
 
 export function splitParagraphs(text) {
@@ -48,11 +97,8 @@ export function validateAnalysis(data, paragraphCount, maxScenes = 3) {
         if (!String(scene.camera ?? '').trim()) errors.push(`${label} 缺少鏡頭方向。`);
         if (!String(scene.anchorText ?? '').trim()) errors.push(`${label} 缺少文字錨點。`);
         if (!Array.isArray(scene.visibleCharacters)) errors.push(`${label} 缺少可見角色資料。`);
-        for (const character of scene.visibleCharacters ?? []) {
-            if (wordCount(character.visualDescription) < 5) errors.push(`${label} 中 ${character.name || '角色'} 的外觀描述不足。`);
-        }
+
     });
-    if (!Array.isArray(data.characterUpdates)) errors.push('缺少 characterUpdates 陣列。');
     return errors;
 }
 
@@ -76,7 +122,7 @@ export function mergeCharacterUpdates(current, updates) {
     for (const update of updates ?? []) {
         const name = String(update.name ?? '').trim();
         if (!name) continue;
-        const existing = next[name] ?? { locked: {}, appearance: '', hair: '', clothing: '', condition: '', accessories: '' };
+        const existing = normalizeCharacterState(next[name]);
         for (const key of ['appearance', 'hair', 'clothing', 'condition', 'accessories']) {
             if (!existing.locked?.[key] && String(update[key] ?? '').trim()) existing[key] = String(update[key]).trim();
         }
@@ -162,6 +208,3 @@ function clampInteger(value, min, max, fallback) {
 }
 function wordCount(value) { return String(value ?? '').trim().split(/\s+/).filter(Boolean).length; }
 function tagCount(value) { return String(value ?? '').split(',').map(value => value.trim()).filter(Boolean).length; }
-
-
-

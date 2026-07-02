@@ -41,7 +41,10 @@ Hard rules:
 - For realistic scenes use suitable anchors such as: masterpiece, best quality, photorealistic, hyper-detailed, 8k resolution, film grain, cinematic lighting.
 - directPrompt and booruPrompt must describe the exact same frame.
 - paragraphIndex is zero-based within the target message; anchorText is a short exact quote used only for placement and must not be copied into prompts.
-- characterUpdates contains only supported visual state. Unknown fields are empty strings. Follow locked fields exactly and do not update them.`;
+- Manually supplied character-state customFields are authoritative visual facts. Never remove or contradict them. Follow locked fields exactly and do not update them.
+- Character state, tracker metadata, World Info, or character cards may be missing. This must never prevent scene generation. Fall back to the selected passage and nearby chat, leave genuinely unknown details generic, and still produce complete prompts.
+- Resolve conflicts in this order: manually locked state, current tracker/state metadata, recent narrative, character/persona reference.
+- characterUpdates contains only supported visual state. Unknown fields are empty strings.`;
 export function buildAnalysisPrompt(input) {
     const task = input.selectionText
         ? `The user selected this exact passage. Produce exactly one scene centered on it:\n${input.selectionText}`
@@ -52,6 +55,3 @@ export function buildAnalysisPrompt(input) {
 export function buildRepairPrompt(raw, errors) {
     return `Repair this invalid scene analysis. Return JSON only.\n\n${SCHEMA_GUIDE}\n\nERRORS:\n${errors.join('\n')}\n\nOUTPUT:\n${raw}`;
 }
-
-
-

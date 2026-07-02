@@ -26,7 +26,7 @@
 
 ## 角色狀態
 
-extension 會在聊天 metadata 維護髮型、衣著、傷勢、配件等視覺快照。設定面板的「角色狀態」可修改或鎖定欄位；重設後，下次分析會從角色卡、persona、啟用的 World Info 與聊天上下文重建。
+extension 會在聊天 metadata 維護髮型、衣著、傷勢、配件等視覺快照。設定面板的「角色狀態」可在 AI 分析前手動新增角色，也可為每位角色新增任意自訂欄位、重新命名、刪除或鎖定資訊。重設後，下次分析會從角色卡、persona、tracker metadata、畫面上可見的 tracker 文字、啟用的 World Info 與目標訊息前文重建。角色狀態缺失或損壞不會阻止場景生成。
 
 ## Slash commands
 
@@ -40,12 +40,10 @@ node --check index.js
 node --test
 ```
 
-目前的自動測試涵蓋中英文段落、JSON 修復解析、過短提示詞、角色欄位鎖定、slash command escaping、設定 migration，以及鏡頭可見性規則。
+目前的自動測試涵蓋中英文段落、JSON 修復解析、過短提示詞、手動角色與自訂欄位、損壞狀態 fallback、長對話／tracker context、角色欄位鎖定、slash command escaping、設定 migration，以及鏡頭可見性規則。
 
 ## 已知界線
 
 - 同一場景的候選圖會以同一份凍結 Prompt 並行批次提交；不同場景仍依序處理，避免一次塞入過多工作。
 - 「取消後續生成」會停止後續場景；已提交的同場景批次可由官方 Image Generation 的取消提示停止。
 - 新圖片直接存在回應 Markdown 中；手動刪除 Markdown 圖片後，metadata 仍保留時會暫時用相容模式顯示，直到下次重新儲存場景。
-
-
