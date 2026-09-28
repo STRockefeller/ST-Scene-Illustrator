@@ -73,6 +73,12 @@ npm test
 
 The automated test suite covers Chinese and English paragraphs, repaired JSON parsing, underspecified prompts, manual characters and custom fields, corrupted-state fallbacks, long conversation and tracker context, locked character fields, slash-command escaping, settings migration, and camera-visibility rules.
 
+## Missing text anchors
+
+A text anchor is a short source quote used to position an illustration. If the model omits it but supplies a valid paragraph index, the extension restores it from that paragraph without another model request. The workbench shows a notice: check **Insert after paragraph** before inserting images (0 means the first paragraph).
+
+If the paragraph index is also invalid and automatic repair fails, select a passage in the target message and analyze again, or use **Manual mode** / `/scene-image your prompt` to enter a prompt and choose the insertion paragraph. This is a text-analysis issue; image-backend settings do not need changing.
+
 ## Current Limitations
 
 - Candidates for the same scene are submitted concurrently using one frozen prompt. Separate scenes are processed sequentially to avoid overloading the backend.

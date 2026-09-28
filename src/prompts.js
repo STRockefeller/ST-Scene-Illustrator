@@ -40,7 +40,7 @@ Hard rules:
 - For anime/illustration scenes end booruPrompt with suitable anchors such as: masterpiece, best quality, ultra-detailed, cinematic lighting, depth of field.
 - For realistic scenes use suitable anchors such as: masterpiece, best quality, photorealistic, hyper-detailed, 8k resolution, film grain, cinematic lighting.
 - directPrompt and booruPrompt must describe the exact same frame.
-- paragraphIndex is zero-based within the target message; anchorText is a short exact quote used only for placement and must not be copied into prompts.
+- paragraphIndex is zero-based within the target message. anchorText must be a non-empty short verbatim quote from that exact TARGET MESSAGE PARAGRAPH, preserving its original language and punctuation. Do not translate it or quote recent chat context. It is used only for placement and must not be copied into image prompts.
 - Manually supplied character-state customFields are authoritative visual facts. Never remove or contradict them. Follow locked fields exactly and do not update them.
 - Character state, tracker metadata, World Info, or character cards may be missing. This must never prevent scene generation. Fall back to the selected passage and nearby chat, leave genuinely unknown details generic, and still produce complete prompts.
 - Resolve conflicts in this order: manually locked state, current tracker/state metadata, recent narrative, character/persona reference.

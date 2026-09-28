@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
     buildImagineCommand, buildSceneMarkdown, coerceAnalysisPayload, composeNegativePrompt, composePromptPrefix, createChatState, createEmptyCharacterState, hasSceneMarkdown, isTemporaryImageUrl, mergeCharacterUpdates, normalizeSettings, stripAllSceneMarkdown, upsertSceneMarkdown,
-    parseAnalysisResponse, quoteSlashArgument, scenePrompt, splitParagraphs, validateAnalysis,
+    normalizeAnalysis, parseAnalysisResponse, quoteSlashArgument, scenePrompt, splitParagraphs, validateAnalysis,
 } from '../src/core.js';
 import { SYSTEM_PROMPT, buildAnalysisPrompt } from '../src/prompts.js';
 
@@ -35,6 +35,28 @@ test('rejects empty, short, and malformed scene prompts', () => {
 
 test('accepts a complete camera-visible scene', () => {
     assert.deepEqual(validateAnalysis({ scenes: [validScene()], characterUpdates: [] }, 2, 3), []);
+});
+
+test('missing anchors recover from the indexed source without requiring model repair', () => {
+    for (const anchorText of [undefined, null, '', '  ']) {
+        const paragraphs = ['第一段。', '她回頭看向窗外。'];
+        const payload = coerceAnalysisPayload({ scenes: [{ ...validScene(), anchorText }] }, paragraphs);
+        assert.deepEqual(validateAnalysis(payload, paragraphs.length), []);
+        const scene = normalizeAnalysis(payload, paragraphs, 1).scenes[0];
+        assert.equal(scene.anchorText, paragraphs[1]);
+        assert.equal(scene.anchorRecovered, true);
+    }
+});
+
+test('anchor recovery preserves supplied quotes and rejects unknown placement', () => {
+    const supplied = coerceAnalysisPayload({ scenes: [validScene()] }, ['第一段。', '她回頭看向窗外。']);
+    assert.equal(supplied.scenes[0].anchorText, '她回頭');
+    assert.equal(supplied.scenes[0].anchorRecovered, undefined);
+    for (const paragraphIndex of [-1, 2, '1', undefined]) {
+        const payload = coerceAnalysisPayload({ scenes: [{ ...validScene(), paragraphIndex, anchorText: '' }] }, ['第一段。', '第二段。']);
+        assert.equal(payload.scenes[0].anchorText, '');
+        assert.ok(validateAnalysis(payload, 2).length >= 2);
+    }
 });
 
 test('locked appearance fields survive incremental updates', () => {

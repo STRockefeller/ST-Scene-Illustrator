@@ -157,11 +157,11 @@ async function analyzeMessage(messageId, selectionText) {
         let raw = await requestAnalysis(prompt, controller.signal);
         let parsed;
         let errors;
-        try { parsed = coerceAnalysisPayload(parseAnalysisResponse(raw)); errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes); }
+        try { parsed = coerceAnalysisPayload(parseAnalysisResponse(raw), paragraphs); errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes); }
         catch (error) { errors = [error.message]; }
         if (errors.length) {
             raw = await requestAnalysis(buildRepairPrompt(typeof raw === 'string' ? raw : JSON.stringify(raw), errors), controller.signal);
-            parsed = coerceAnalysisPayload(parseAnalysisResponse(raw));
+            parsed = coerceAnalysisPayload(parseAnalysisResponse(raw), paragraphs);
             errors = validateAnalysis(parsed, paragraphs.length, selectionText ? 1 : settings.maxScenes);
             if (errors.length) throw new Error(errors.join('\n'));
         }
@@ -290,6 +290,11 @@ function createSceneCard(scene, index) {
     card.dataset.sceneId = scene.id;
     card.innerHTML = `<div class="si-scene-head"><strong></strong><label><input type="checkbox" class="si-enabled" checked> ${tr('Generate this scene')}</label></div><div class="si-scene-meta"><label>${tr('Insert after paragraph')}</label><input class="text_pole si-paragraph" type="number" min="0"><label>${tr('Prompt style')}</label><select class="text_pole si-style"><option value="direct">${tr('Direct description')}</option><option value="booru">Booru tags</option></select></div><label>${tr('Direct description prompt')}<textarea class="text_pole si-direct"></textarea></label><label>Booru tags<textarea class="text_pole si-booru"></textarea></label><label>Negative prompt<textarea class="text_pole si-negative"></textarea></label><details class="si-actual-prompt" open><summary>${tr('Fixed prompt sent to the image model')}</summary><div><b>Positive</b><pre class="si-actual-positive"></pre><b>Negative</b><pre class="si-actual-negative"></pre></div></details><div class="si-candidates"></div>`;
     card.querySelector('strong').textContent = `${index + 1}. ${scene.title}`;
+    if (scene.anchorRecovered) {
+        const notice = document.createElement('p');
+        notice.textContent = tr('The model omitted the text anchor, so it was restored from the source paragraph. Check “Insert after paragraph” before inserting images (0 is the first paragraph).');
+        card.querySelector('.si-scene-meta').after(notice);
+    }
     card.querySelector('.si-paragraph').value = scene.paragraphIndex;
     card.querySelector('.si-style').value = scene.style || settings.promptStyle;
     card.querySelector('.si-direct').value = scene.directPrompt;

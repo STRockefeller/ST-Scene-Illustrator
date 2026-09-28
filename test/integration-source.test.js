@@ -50,7 +50,7 @@ test('long-chat analysis always reads context before the selected historical mes
 test('character state is optional and corrupted snapshots fall back safely', () => {
     assert.match(source, /character reference unavailable; continuing from chat text/);
     assert.match(source, /invalid character state snapshot; using an empty state/);
-    assert.match(source, /coerceAnalysisPayload\(parseAnalysisResponse\(raw\)\)/);
+    assert.match(source, /coerceAnalysisPayload\(parseAnalysisResponse\(raw\), paragraphs\)/);
 });
 
 test('state editor can add characters and custom fields before AI analysis', () => {

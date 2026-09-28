@@ -44,7 +44,9 @@ const ZH_TW = {
     'The scenes array is missing.': '缺少 scenes 陣列。', 'The scene count must be between 1 and {max}.': '場景數必須介於 1 與 {max}。', 'Scene {number}': '場景 {number}',
     '{scene} has an invalid paragraphIndex.': '{scene} 的 paragraphIndex 無效。', '{scene} has a direct prompt that is too short.': '{scene} 的 direct prompt 過短。',
     '{scene} has a booru prompt that is too short.': '{scene} 的 booru prompt 過短。', '{scene} is missing camera direction.': '{scene} 缺少鏡頭方向。',
-    '{scene} is missing a text anchor.': '{scene} 缺少文字錨點。', '{scene} is missing visible character data.': '{scene} 缺少可見角色資料。',
+    '{scene} is missing a text anchor and could not be positioned automatically. Select a passage in the target message and analyze again, or use Manual mode to enter a prompt and choose the insertion paragraph.': '{scene} 缺少文字錨點，且無法自動定位。請在目標訊息中反白一段文字後重新分析，或使用「完全手動」輸入提示詞並指定插入段落。',
+    'The model omitted the text anchor, so it was restored from the source paragraph. Check “Insert after paragraph” before inserting images (0 is the first paragraph).': '模型未提供文字錨點，已從原文段落自動補上。插入圖片前請確認「插入段落」（0 代表第一段）。',
+    '{scene} is missing visible character data.': '{scene} 缺少可見角色資料。',
 };
 
 export function getUiLocale() {

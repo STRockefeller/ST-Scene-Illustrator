@@ -55,11 +55,18 @@ export function normalizeCharacterState(value = {}) {
     };
 }
 
-export function coerceAnalysisPayload(value) {
+export function coerceAnalysisPayload(value, paragraphs = []) {
     if (!value || typeof value !== 'object') return value;
     value.characterUpdates = Array.isArray(value.characterUpdates) ? value.characterUpdates : [];
     if (Array.isArray(value.scenes)) {
         for (const scene of value.scenes) {
+            if (!String(scene.anchorText ?? '').trim() && Number.isInteger(scene.paragraphIndex)) {
+                const paragraph = paragraphs[scene.paragraphIndex];
+                if (typeof paragraph === 'string' && paragraph.trim()) {
+                    scene.anchorText = Array.from(paragraph.trim()).slice(0, 40).join('');
+                    scene.anchorRecovered = true;
+                }
+            }
             scene.visibleCharacters = Array.isArray(scene.visibleCharacters) ? scene.visibleCharacters : [];
             scene.visibleObjects = Array.isArray(scene.visibleObjects) ? scene.visibleObjects : [];
             scene.negativePrompt = String(scene.negativePrompt ?? '');
@@ -97,7 +104,7 @@ export function validateAnalysis(data, paragraphCount, maxScenes = 3) {
         if (wordCount(scene.directPrompt) < 55) errors.push(tr('{scene} has a direct prompt that is too short.', { scene: label }));
         if (tagCount(scene.booruPrompt) < 30) errors.push(tr('{scene} has a booru prompt that is too short.', { scene: label }));
         if (!String(scene.camera ?? '').trim()) errors.push(tr('{scene} is missing camera direction.', { scene: label }));
-        if (!String(scene.anchorText ?? '').trim()) errors.push(tr('{scene} is missing a text anchor.', { scene: label }));
+        if (!String(scene.anchorText ?? '').trim()) errors.push(tr('{scene} is missing a text anchor and could not be positioned automatically. Select a passage in the target message and analyze again, or use Manual mode to enter a prompt and choose the insertion paragraph.', { scene: label }));
         if (!Array.isArray(scene.visibleCharacters)) errors.push(tr('{scene} is missing visible character data.', { scene: label }));
 
     });
@@ -110,6 +117,7 @@ export function normalizeAnalysis(data, paragraphs, messageId) {
         title: String(scene.title || tr('Scene {number}', { number: index + 1 })).trim(), messageId,
         paragraphIndex: clampInteger(scene.paragraphIndex, 0, Math.max(0, paragraphs.length - 1), 0),
         anchorText: String(scene.anchorText || '').trim(), camera: String(scene.camera || '').trim(),
+        anchorRecovered: scene.anchorRecovered === true,
         composition: String(scene.composition || '').trim(),
         visibleCharacters: Array.isArray(scene.visibleCharacters) ? scene.visibleCharacters : [],
         visibleObjects: Array.isArray(scene.visibleObjects) ? scene.visibleObjects : [], lighting: String(scene.lighting || '').trim(),
